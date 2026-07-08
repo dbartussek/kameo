@@ -26,6 +26,7 @@ struct Message {
     attrs: Vec<TokenStream>,
     generics: Generics,
     ctx: Option<(Ident, usize)>,
+    remote: bool,
 }
 
 impl
@@ -36,18 +37,20 @@ impl
         Vec<Vec<Attribute>>,
         Generics,
         Option<Ident>,
+        bool,
     )> for Message
 {
     type Error = syn::Error;
 
     fn try_from(
-        (vis, mut sig, attrs, field_doc_attrs, generics, ctx): (
+        (vis, mut sig, attrs, field_doc_attrs, generics, ctx, remote): (
             Visibility,
             Signature,
             Vec<TokenStream>,
             Vec<Vec<Attribute>>,
             Generics,
             Option<Ident>,
+            bool,
         ),
     ) -> Result<Self, Self::Error> {
         let ident = format_ident!("{}", sig.ident.to_string().to_upper_camel_case());
@@ -94,6 +97,7 @@ impl
             attrs,
             generics,
             ctx: ctx.zip(ctx_pos),
+            remote,
         })
     }
 }
@@ -116,6 +120,8 @@ impl Messages {
                         })
                             .map(|attr| quote! { #attr })
                             .collect();
+
+                        let mut remote = false;
 
                         let mut is_message = false;
                         let mut ctx = None;
@@ -152,6 +158,12 @@ impl Messages {
                                                         Meta::Path(path) if path.is_ident("ctx") => {
                                                             ctx = Some(Ident::new("ctx", Span::call_site()));
                                                             return None;
+                                                        },
+                                                        Meta::Path(path) if path.is_ident("remote") => {
+                                                            remote = true;
+                                                            return Some(quote! {
+                                                                #[derive(::serde::Serialize, ::serde::Deserialize)]
+                                                            });
                                                         },
                                                         Meta::NameValue(MetaNameValue { path, value, .. }) if path.is_ident("ctx") => {
                                                             match value {
@@ -293,6 +305,7 @@ impl Messages {
                             field_doc_attrs,
                             generics,
                             ctx,
+                            remote,
                         )) {
                             Ok(message) => Some(message),
                             Err(err) => {
@@ -375,6 +388,7 @@ impl Messages {
                  fields,
                  generics,
                  ctx,
+                 remote,
                  ..
              }| {
                 let mut all_generics = item_impl.generics.clone();
@@ -422,8 +436,16 @@ impl Messages {
                     quote! { _ctx }
                 };
 
+                let remote_attr = if *remote {
+                    quote! { #[::kameo::remote_message] }
+
+                } else {
+                    quote! {}
+                };
+
                 quote_spanned! {sig.span()=>
                     #[automatically_derived]
+                    #remote_attr
                     impl #impl_generics ::kameo::message::#trait_name<#msg_ident #msg_ty_generics> for #actor_ident #actor_ty_generics #where_clause {
                         type Reply = #reply;
 
