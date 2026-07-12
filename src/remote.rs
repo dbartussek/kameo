@@ -223,8 +223,16 @@ pub fn bootstrap() -> Result<PeerId, Box<dyn error::Error>> {
     bootstrap_on("/ip4/0.0.0.0/tcp/0")
 }
 
-/// Bootstrap with a specific listen address.
 pub fn bootstrap_on(addr: &str) -> Result<PeerId, Box<dyn error::Error>> {
+    bootstrap_on_config(addr, messaging::Config::default())
+}
+
+pub fn bootstrap_config(config: messaging::Config) -> Result<PeerId, Box<dyn error::Error>> {
+    bootstrap_on_config("/ip4/0.0.0.0/tcp/0", config)
+}
+
+/// Bootstrap with a specific listen address.
+pub fn bootstrap_on_config(addr: &str, config: messaging::Config) -> Result<PeerId, Box<dyn error::Error>> {
     #[derive(NetworkBehaviour)]
     struct BootstrapBehaviour {
         kameo: Behaviour,
@@ -241,7 +249,7 @@ pub fn bootstrap_on(addr: &str) -> Result<PeerId, Box<dyn error::Error>> {
         .with_quic()
         .with_behaviour(|key| {
             let local_peer_id = key.public().to_peer_id();
-            let kameo = Behaviour::new(local_peer_id, messaging::Config::default());
+            let kameo = Behaviour::new(local_peer_id, config);
             let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)?;
 
             Ok(BootstrapBehaviour { kameo, mdns })
